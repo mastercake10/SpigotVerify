@@ -1,0 +1,13 @@
+login:
+    user: "SPIGOT_USER"
+    password: "SPIGOT_PASSWORD"
+
+discord_api_token: "TOKEN"
+
+roles:
+    "9732": "SafariNet"
+    "40527": "AdvancedOreGen"
+    "60331": "DropEdit"
+premium_roles:
+    - 564569651107987466
+    - 564569830829850644
