@@ -42,28 +42,41 @@ class SpigotSession:
 
         driver.get('https://www.spigotmc.org/')
 
+        try:
+            WebDriverWait(driver, 20).until(EC.frame_to_be_available_and_switch_to_it((By.XPATH, '//iframe[@title="Widget containing a Cloudflare security challenge"]')))
+        except:
+            print("no cf challenge iframe found")
+        finally:
+            pass
+
         challenge_button_path = '//*[@id="challenge-stage"]/div/input'
-        spigot_logo_path = '//*[@id="logo"]'
+        challenge_button_path2 = '//*[@id="cf-stage"]/div[6]/label/input'
+        spigot_userbar_path = '//*[@id="userBar"]'
 
         #print(driver.page_source.encode("utf-8"))
         try:
             # waiting for loading the home site
+            print("Waiting for challenge buttons to appear...")
             element = WebDriverWait(driver, 200).until(EC.any_of(
                         EC.presence_of_element_located((By.XPATH, challenge_button_path)),
-                        EC.presence_of_element_located((By.XPATH, spigot_logo_path))
+                        EC.presence_of_element_located((By.XPATH, challenge_button_path2)),
+                        EC.presence_of_element_located((By.XPATH, spigot_userbar_path))
                 )
             )
         except:
             #print(driver.page_source.encode("utf-8"))
             print("Challenge button not found.")
         finally:
-            if element.get_attribute("id") != "logo":
+            time.sleep(2)
+
+            if element.get_attribute("id") != "userBar":
                 element.click()
-                print("clicked cloudflare challenge button")
+                print("Clicked cloudflare challenge button")
+            driver.switch_to.default_content()
 
         try:
             # waiting for loading the home site
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, spigot_logo_path)))
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, spigot_userbar_path)))
         except:
             #print(driver.page_source.encode("utf-8"))
             print(driver.title)
