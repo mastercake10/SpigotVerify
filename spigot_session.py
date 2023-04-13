@@ -49,7 +49,7 @@ class SpigotSession:
         finally:
             pass
 
-        challenge_button_path = '//*[@id="challenge-stage"]/div/input'
+        challenge_button_path = '//*[@id="challenge-stage"]/div/label/input'
         challenge_button_path2 = '//*[@id="cf-stage"]/div[6]/label/input'
         spigot_userbar_path = '//*[@id="userBar"]'
 
