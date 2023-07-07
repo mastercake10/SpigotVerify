@@ -98,7 +98,7 @@ class SpigotScraper:
 
         return messages
 
-    def get_profile_post_likes(self, post_id=196759) -> list[str]:
+    def get_profile_post_likes(self, post_id) -> list[str]:
         soup = self.session.getSoup(self.URL_PROFILE_POST_LIKES.format(post_id=post_id))
 
         users = []

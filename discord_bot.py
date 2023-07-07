@@ -111,7 +111,7 @@ class SpigotHandler:
         return plugins_bought
     
     def get_last_user_liking(self) -> str:
-        new_likes = self.scraper.get_profile_post_likes()
+        new_likes = self.scraper.get_profile_post_likes(settings["profile_post_id"])
         last_user = None
         likes = []
         for user in new_likes:

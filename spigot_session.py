@@ -25,10 +25,11 @@ class SpigotSession:
     session: requests.Session
     last_req: Optional[int]
 
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(self, username: str, password: str, twofa_provider: str) -> None:
         self.username = username
         self.password = password
         self.last_req = None
+        self.twofa_provider = twofa_provider
 
     def make_new_cf_session(self) -> None:
         if not self.session:
@@ -114,7 +115,7 @@ class SpigotSession:
             data = {
                 "code": code,
                 "trust": 1,
-                "provider": "totp",
+                "provider": self.twofa_provider,
                 "_xfConfirm": 1,
                 "_xfToken": "",
                 "remember": 1,

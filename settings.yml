@@ -4,6 +4,9 @@ login:
     # 2fa method, totp or email
     2fa_provider: "totp"
 
+# the profile post id that purchasers need to like
+profile_post_id: 196759
+
 discord_api_token: "TOKEN"
 guild_id: 330725294749122561
 
