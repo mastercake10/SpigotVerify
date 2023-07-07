@@ -1,5 +1,5 @@
 discord-py-interactions
-git+https://github.com/lukect/undetected-chromedriver.git
+undetected-chromedriver==3.5.0
 pyyaml
 xvfbwrapper
 bs4
