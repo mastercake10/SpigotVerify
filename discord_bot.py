@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
 import interactions
-from interactions.api.models.guild import Guild
-from interactions.api.cache import Item
-from interactions.api.models.member import Member
-from interactions.api.models.channel import Channel
+from interactions import listen, Intents
+from interactions import ComponentContext, SlashContext
 
 from spigot_scraper import SpigotScraper
 from spigot_session import SpigotSession
@@ -14,210 +12,214 @@ import yaml
 
 settings = yaml.safe_load(open("settings.yml", "r"))
 
-bot = interactions.Client(token=settings["discord_api_token"])
+bot = interactions.Client(intents=Intents.DEFAULT, sync_interactions=True, asyncio_debug=True)
 
-roles = settings["roles"]
+class SpigotHandler:
+    def __init__(self) -> None:
+        self.spigotSession = SpigotSession(settings["login"]["user"], settings["login"]["password"], settings["login"]["2fa_provider"])
+        self.spigotSession.restore()
 
-premium_roles = settings["premium_roles"]
+        soup = self.spigotSession.getSoup("https://www.spigotmc.org/")
 
-s = SpigotSession(settings["login"]["user"], settings["login"]["password"])
-s.restore()
+        if not soup or not soup.find(id="userBar"):
+            print("user not logged in, logging in...")
+            self.spigotSession.login()
+            print("logged in.")
 
-soup = s.getSoup("https://www.spigotmc.org/")
+        self.spigotSession.save()
 
-if not soup or not soup.find(id="userBar"):
-    print("user not logged in, logging in...")
-    s.login()
-    print("logged in.")
+        # update with new details
+        soup = self.spigotSession.getSoup("https://www.spigotmc.org/")
 
-s.save()
+        username = soup.find_all("a", class_="username")[0]
+        user_id = username["href"].split("/")[1]
+        print(f"Logged in as: {username.text}/{user_id}")
 
-username = soup.find_all("a", class_="username")[0]
-user_id = username["href"].split("/")[1]
-print(f"Logged in as: {username.text}/{user_id}")
+        self.scraper = SpigotScraper(self.spigotSession, user_id)
+        try:
+            f = open('resources.json')
+            self.resources = json.load(f)
 
-scraper = SpigotScraper(s, user_id)
-try:
-    f = open('resources.json')
-    resources = json.load(f)
-except FileNotFoundError:
-    resources = {}
+            if isinstance(list(self.resources.keys())[0], str):
+                # convert old str keys to ints
+                converted = {}       
+                for key, value in self.resources.items():
+                    if isinstance(key, str):
+                        converted[int(key)] = value
+                self.resources = converted
 
-resource_ids = scraper.get_resources()
+                
 
-linked_users = {}
-try:
-    f = open('linked_users.json')
-    linked_users = json.load(f)
-except FileNotFoundError:
-    linked_users = {}
+        except FileNotFoundError:
+            self.resources = {}
 
-async def update_buyers():
-    for id in resource_ids:
-        buyers = scraper.get_buyers(id, page_num=0)
-        for buyer in buyers:
-            add = True
-            for buyer2 in resources[id]:
-                if type(buyer2) == dict:
-                    if buyer2["user_id"] == buyer.user_id:
-                        add = False
-                else:
-                    if buyer2.user_id == buyer.user_id:
-                        add = False
-            if add:
-                resources[id].append(buyer)
-                name = roles[id]
-                print("tesdt")
-                await info_buy(f"User {buyer.user_id} just bought {name}!")
-                await asyncio.sleep(1)
-                f = open('resources.json', 'w')
-                json.dump(resources, f, default=lambda x: x.__dict__)
-                f.close()
+        # get all premium resource of current user
+        self.resource_ids = self.scraper.get_resources()
+        # update entire buyer list of (new) resources
+        for id in filter(lambda x: x not in self.resources, self.resource_ids):
+            title, max_page = self.scraper.get_resource_page_info(id)
+            print(f"Getting all buyers for resource id: {id}, title: {title}")
+            buyers = []
+            for i in range(1, max_page+1):
+                buyers.extend(self.scraper.get_buyers(id, page_num=i))
+                print(f"Page [{i} / {max_page}], Buyers: {len(buyers)}")
 
-for id in resource_ids:
-    if id not in resources:
-        print(f"getting buyers for {id}")
-        max_page = scraper.get_buyer_page_count(id)
-        buyers = []
-        for i in range(1, max_page+1):
-            buyers.extend(scraper.get_buyers(id, page_num=i))
+            self.resources[int(id)] = buyers
 
-        resources[id] = buyers
-
-    f = open('resources.json', 'w')
-    json.dump(resources, f, default=lambda x: x.__dict__)
-    f.close()
-
-def get_plugins_bought(spigot_user):
-    plugins_bought = set()
-    for res_id in resources:
-        for buyEntry in resources[res_id]:
-            if type(buyEntry) is dict and buyEntry["user_id"] == spigot_user or hasattr(buyEntry, 'user_id') and buyEntry.user_id == spigot_user:
-                plugins_bought.add(res_id)
-
-    return plugins_bought
-
-async def updata_roles(discord_id, spigot_id):
-    res_ids = get_plugins_bought(spigot_id)
-    await handle_roles(discord_id, res_ids)
-
-async def link(discord_id, spigot_id):
-    if spigot_id not in linked_users:
-        linked_users[spigot_id] = discord_id
-        #await private_message(discord_id, f"Sucessfully linked your account with https://www.spigotmc.org/members/{spigot_id}!")
-        await info(f"User <@{discord_id}> linked account to https://www.spigotmc.org/members/{spigot_id}")
-        await updata_roles(discord_id, spigot_id)
-        f = open('linked_users.json', 'w')
-        json.dump(linked_users, f)
+        f = open('resources.json', 'w')
+        json.dump(self.resources, f, default=lambda x: x.__dict__)
         f.close()
 
+        self.linked_users = {}
+        try:
+            f = open('linked_users.json')
+            self.linked_users = json.load(f)
+        except FileNotFoundError:
+            self.linked_users = {}
 
-async def handle_messages():
-    for msg in scraper.get_messages():
-        if "Verification" in msg["title"]:
-            if len(msg["title"].split(" ")) > 2:
-                id = msg["title"].split(" ")[2]
-                if id.isnumeric():
-                    id = int(id)
-                    await link(id, msg["sender"])
+    async def update_buyers(self) -> None:
+        """Updating buyers of resources, only checking first page"""
+        for id in self.resource_ids:
+            # only check first page for new buyers
+            buyers = self.scraper.get_buyers(id, page_num=0)
+            for buyer in buyers:
+                add = True
+                for buyer2 in self.resources[id]:
+                    if type(buyer2) == dict:
+                        if buyer2["user_id"] == buyer.user_id:
+                            add = False
+                    else:
+                        if buyer2.user_id == buyer.user_id:
+                            add = False
+                if add:
+                    self.resources[id].append(buyer)
+                    name = settings["roles"]["resources"][id]
+                    print(f"User {buyer.user_id} just bought {name}!")
+                    await info_buy(f"User {buyer.user_id} just bought {name}!")
+                    await asyncio.sleep(1)
+                    f = open('resources.json', 'w')
+                    json.dump(self.resources, f, default=lambda x: x.__dict__)
+                    f.close()
 
-async def message_task():
-    while not bot.loop.is_closed():
-        print("Checking for new messages...")
-        await handle_messages()
-        await asyncio.sleep(60)
+    def get_plugins_bought(self, spigot_user: str) -> set[str]:
+        plugins_bought = set()
+        for res_id in self.resources:
+            for buyEntry in self.resources[res_id]:
+                if type(buyEntry) is dict and buyEntry["user_id"] == spigot_user or hasattr(buyEntry, 'user_id') and buyEntry.user_id == spigot_user:
+                    plugins_bought.add(res_id)
 
-async def buy_task():
-    while not bot.loop.is_closed():
-        print("Checking for new buyers...")
-        await update_buyers()
-        await asyncio.sleep(60 * 5)
+        return plugins_bought
+    
+    def get_last_user_liking(self) -> str:
+        new_likes = self.scraper.get_profile_post_likes()
+        last_user = None
+        likes = []
+        for user in new_likes:
+            if user not in likes:
+                likes.append(user)
+                last_user = user
 
-likes = []
-def get_last_user_liking():
-    new_likes = scraper.get_profile_post_likes()
-    last_user = None
-    for user in new_likes:
-        if user not in likes:
-            likes.append(user)
-            last_user = user
+        return last_user
+    
+    async def link(self, discord_id: int, spigot_id: str, ctx: ComponentContext) -> None:
+        if spigot_id not in self.linked_users:
+            self.linked_users[spigot_id] = discord_id
+            await ctx.send(f"Sucessfully linked your account with https://www.spigotmc.org/members/{spigot_id}!", ephemeral=True)
+            await info_verify(f"User <@{discord_id}> linked account to https://www.spigotmc.org/members/{spigot_id}")
+            await updata_roles(discord_id, spigot_id)
+            f = open('linked_users.json', 'w')
+            json.dump(self.linked_users, f)
+            f.close()
+        else:
+            await ctx.send("Failed to link: Please like the profile post first", ephemeral=True)
 
-    return last_user
-             
 
-get_last_user_liking()
+@listen()
+async def on_startup() -> None:
+    global spigotHandler
+    spigotHandler = SpigotHandler()
+
+@listen()
+async def on_ready() -> None:
+    global guild
+    guild = bot.get_guild(settings["guild_id"])
+    print(f"Active in guild: {guild.name}")
+
+    buy_task.start()
+    await buy_task()
+
+async def updata_roles(discord_id, spigot_id) -> None:
+    res_ids = spigotHandler.get_plugins_bought(spigot_id)
+    await handle_roles(discord_id, res_ids)
+
+
+from interactions import Task, TimeTrigger
+
+@Task.create(TimeTrigger(hour=0, minute=5))
+async def buy_task() -> None:
+    print("Checking for new buyers...")
+    await spigotHandler.update_buyers()
+
 
 complete_button = interactions.Button(
+    custom_id="complete_button",
     style=interactions.ButtonStyle.DANGER,
     label="Done",
-    custom_id="primary",
-    scope=347179
 )
 
-@bot.event
-async def on_ready():
-    print("bot is now online.")
-
-@bot.command(
+@interactions.slash_command(
     name="verify",
     description="Connects your SpigotMC-Account with Discord. Also gives you access to premium channels.",
 )
-async def verify_command(ctx: interactions.CommandContext):
-    code = ctx.author.user.id
-    bot.http.cache.members.add(Item(id=str(code), value=ctx.author))
+async def verify_command(ctx: SlashContext) -> None:
     await ctx.send("Please go to my profile and like the Verifcation post to link your discord account with SpigotMC! Click \"Done\" when you're done liking. https://www.spigotmc.org/members/mastercake.29634/#profile-post-196759", 
         ephemeral=True,
         components=complete_button)
-    #await ctx.send(f"Please send any message to me on spigot to verify using this link: \nhttps://www.spigotmc.org/conversations/add?to=MasterCake&title=Verification%2C+Code%3A+{code}+%28DONT+CHANGE+SUBJECT%2C+Write+%27verify%27+below+as+message%29", ephemeral=True)
-    
-@bot.component(complete_button)
-async def button_response(ctx: interactions.ComponentContext):
-    print("someone clicked the button! :O")
-    last_user = get_last_user_liking()
-    #last_user = "zedar_yt.1112302"
+
+@interactions.component_callback(complete_button.custom_id)
+async def button_response(ctx: ComponentContext) -> None:
+    last_user = spigotHandler.get_last_user_liking()
 
     if last_user:
-        await link(int(ctx.author.user.id), last_user)
-        await ctx.send(f"Sucessfully linked your account to {last_user}", ephemeral=True)
+        await spigotHandler.link(int(ctx.author.user.id), last_user, ctx)
     else:
         await ctx.send("Failed to link: Please like the profile post first", ephemeral=True)
 
-async def handle_roles(user_id, resource_ids):
-    guild = await bot.http.get_guild(330725294749122561)
-    guild = Guild(**guild)
-    
+async def handle_roles(user_id, resource_ids) -> None:
+    resource_roles = settings["roles"]["resources"]
+
     for resource in resource_ids:
-        role_name = roles[resource]
+        role_name = resource_roles[resource]
         for role in guild.roles:
-            if role["name"] == role_name:
+            if role.name == role_name:
                 break
 
-        member = await bot.http.get_member(330725294749122561, int(user_id))
-        member = Member(**member)
-
-        await bot.http.add_member_role(guild.id, member.user.id, role["id"], "Verify Bot")
+        member = guild.get_member(int(user_id))
     
+        await member.add_role(role, "Verify Bot")
+        print(f"Added role {role.name} to {member.display_name}")
+    
+    premium_roles = [next(filter(lambda r: r.name == name, guild.roles)) for name in settings["roles"]["premium"]]
     if len(resource_ids) > 0:
-        await bot.http.add_member_role(guild.id, member.user.id, premium_roles[0], "Verify Bot")
+        await member.add_role(premium_roles[0], "Verify Bot")
+        print(f"Added role {premium_roles[0].name} to {member.display_name}")
     if len(resource_ids) > 1:
-        await bot.http.add_member_role(guild.id, member.user.id, premium_roles[1], "Verify Bot")
-    print("added role")
-
-   #res = await bot.http.add_member_role(guild_id=330725294749122561, user_id=int(user_id), role_id=468453568391806977, reason="Verify bot")
-
-async def info(msg):
-    await bot.http.send_message(927339823553978468, msg)
-
-async def private_message(user_id, msg):
-    channel = await bot.http.create_dm(int(user_id))
-    channel = Channel(**channel)
-
-    await bot.http.send_message(channel.id, msg)
-
-async def info_buy(msg):
-    await bot.http.send_message(927349992836960348, msg)
+        await member.add_role(premium_roles[1], "Verify Bot")
+        print(f"Added role {premium_roles[1].name} to {member.display_name}")
 
 
-bot.loop.create_task(buy_task())
-bot.start()
+from interactions.models.discord.snowflake import to_snowflake
 
+async def private_message(user_id: int, msg: str) -> None:
+    data = await bot.http.create_dm(user_id)
+    channel_id = to_snowflake(data["id"])
+    payload = interactions.models.discord.process_message_payload(msg)
+    await bot.http.create_message(channel_id=channel_id, payload=payload)
+
+async def info_verify(msg: str) -> None:
+    await guild.get_channel(settings["channels"]["verify_log"]).send(msg)
+
+async def info_buy(msg: str) -> None:
+    await guild.get_channel(settings["channels"]["buy_log"]).send(msg)
+
+bot.start(settings["discord_api_token"])

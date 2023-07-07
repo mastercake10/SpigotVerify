@@ -1,13 +1,22 @@
 login:
     user: "SPIGOT_USER"
     password: "SPIGOT_PASSWORD"
+    # 2fa method, totp or email
+    2fa_provider: "totp"
 
 discord_api_token: "TOKEN"
+guild_id: 330725294749122561
+
+channels:
+    buy_log: 927349992836960348
+    verify_log: 927339823553978468
 
 roles:
-    "9732": "SafariNet"
-    "40527": "AdvancedOreGen"
-    "60331": "DropEdit"
-premium_roles:
-    - 564569651107987466
-    - 564569830829850644
+    resources:
+        # spigot_resource_id : discord_role_name
+        9732: "SafariNet"
+        40527: "AdvancedOreGen"
+        60331: "DropEdit"
+    premium:
+        - "Premium"
+        - "Premium+"

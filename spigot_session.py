@@ -18,8 +18,12 @@ import pickle
 from bs4 import BeautifulSoup
 import time
 
+from typing import Optional
+
 class SpigotSession:
-    RATE_LIMIT = 2.5
+    RATE_LIMIT = 0.5 # seconds
+    session: requests.Session
+    last_req: Optional[int]
 
     def __init__(self, username: str, password: str) -> None:
         self.username = username
@@ -32,7 +36,7 @@ class SpigotSession:
 
         options = webdriver.ChromeOptions()
         options.add_argument(f'--no-sandbox')
-        driver = uc.Chrome(options=options, browser_executable_path="/usr/bin/google-chrome")
+        driver = uc.Chrome(options=options, browser_executable_path="/usr/bin/brave")
 
         # calling a non-exisiting url for adding cookies before accessing the website
         driver.get("https://www.spigotmc.org/e")
@@ -102,15 +106,15 @@ class SpigotSession:
             "_xfToken": "",
             "redirect": "."}
 
-        res = self.session.post("https://www.spigotmc.org/login/login", data=data)
-        print(res.text)
+        response = self.session.post("https://www.spigotmc.org/login/login", data=data)
+        #print(res.text)
         code = input("Please enter 2FA code:")
         
         if code:
             data = {
                 "code": code,
                 "trust": 1,
-                "provider": "email",
+                "provider": "totp",
                 "_xfConfirm": 1,
                 "_xfToken": "",
                 "remember": 1,
@@ -120,9 +124,9 @@ class SpigotSession:
                 "_xfNoRedirect": 1,
                 "_xfResponseType": "json"
             }
-            res = self.session.post("https://www.spigotmc.org/login/two-step", data=data)
+            response = self.session.post("https://www.spigotmc.org/login/two-step", data=data)
         
-            print(res.status_code)
+            print(response.status_code)
 
     def save(self) -> None:
         """Saves the current session to pickle file."""
