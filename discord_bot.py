@@ -153,9 +153,9 @@ async def updata_roles(discord_id, spigot_id) -> None:
     await handle_roles(discord_id, res_ids)
 
 
-from interactions import Task, TimeTrigger
+from interactions import Task, IntervalTrigger
 
-@Task.create(TimeTrigger(hour=0, minute=5))
+@Task.create(IntervalTrigger(minutes=5))
 async def buy_task() -> None:
     print("Checking for new buyers...")
     await spigotHandler.update_buyers()
