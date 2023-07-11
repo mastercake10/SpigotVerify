@@ -111,15 +111,9 @@ class SpigotHandler:
         return plugins_bought
     
     def get_last_user_liking(self) -> str:
-        new_likes = self.scraper.get_profile_post_likes(settings["profile_post_id"])
-        last_user = None
-        likes = []
-        for user in new_likes:
-            if user not in likes:
-                likes.append(user)
-                last_user = user
+        likes = self.scraper.get_profile_post_likes(settings["profile_post_id"])
 
-        return last_user
+        return likes[0]
     
     async def link(self, discord_id: int, spigot_id: str, ctx: ComponentContext) -> None:
         if spigot_id not in self.linked_users:
