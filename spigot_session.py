@@ -13,6 +13,7 @@ import requests
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
 
 import pickle
 from bs4 import BeautifulSoup
@@ -39,45 +40,49 @@ class SpigotSession:
         options.add_argument(f'--no-sandbox')
         driver = uc.Chrome(options=options, browser_executable_path="/usr/bin/brave")
 
-        # calling a non-exisiting url for adding cookies before accessing the website
-        driver.get("https://www.spigotmc.org/e")
-        for cookie in self.session.cookies:
-            driver.add_cookie({"name": cookie.name, "value": cookie.value, "domain": cookie.domain})
+        # opening spigot in a new tab seems to make cloudflare work again
+        time.sleep(2)
+        driver.execute_script('''window.open("http://spigotmc.org","_blank");''')
+        time.sleep(10)
+        driver.switch_to.window(driver.window_handles[1])
+        print(driver.title)
+        if "SpigotMC" not in driver.title:
+            # need to click cloudflare challenge tickbox
 
+            for cookie in self.session.cookies:
+                driver.add_cookie({"name": cookie.name, "value": cookie.value, "domain": cookie.domain})
 
-        driver.get('https://www.spigotmc.org/')
+            try:
+                WebDriverWait(driver, 20).until(EC.frame_to_be_available_and_switch_to_it((By.XPATH, '//iframe[@title="Widget containing a Cloudflare security challenge"]')))
+            except:
+                print("no cf challenge iframe found")
+            finally:
+                pass
 
-        try:
-            WebDriverWait(driver, 20).until(EC.frame_to_be_available_and_switch_to_it((By.XPATH, '//iframe[@title="Widget containing a Cloudflare security challenge"]')))
-        except:
-            print("no cf challenge iframe found")
-        finally:
-            pass
+            challenge_button_path = '//*[@id="challenge-stage"]/div/label/input'
+            challenge_button_path2 = '//*[@id="cf-stage"]/div[6]/label/input'
+            spigot_userbar_path = '//*[@id="userBar"]'
 
-        challenge_button_path = '//*[@id="challenge-stage"]/div/label/input'
-        challenge_button_path2 = '//*[@id="cf-stage"]/div[6]/label/input'
-        spigot_userbar_path = '//*[@id="userBar"]'
-
-        #print(driver.page_source.encode("utf-8"))
-        try:
-            # waiting for loading the home site
-            print("Waiting for challenge buttons to appear...")
-            element = WebDriverWait(driver, 200).until(EC.any_of(
-                        EC.presence_of_element_located((By.XPATH, challenge_button_path)),
-                        EC.presence_of_element_located((By.XPATH, challenge_button_path2)),
-                        EC.presence_of_element_located((By.XPATH, spigot_userbar_path))
-                )
-            )
-        except:
             #print(driver.page_source.encode("utf-8"))
-            print("Challenge button not found.")
-        finally:
-            time.sleep(2)
+            try:
+                # waiting for loading the home site
+                print("Waiting for challenge buttons to appear...")
+                element = WebDriverWait(driver, 200).until(EC.any_of(
+                            EC.presence_of_element_located((By.XPATH, challenge_button_path)),
+                            EC.presence_of_element_located((By.XPATH, challenge_button_path2)),
+                            EC.presence_of_element_located((By.XPATH, spigot_userbar_path))
+                    )
+                )
+            except:
+                #print(driver.page_source.encode("utf-8"))
+                print("Challenge button not found.")
+            finally:
+                time.sleep(1)
 
-            if element.get_attribute("id") != "userBar":
-                element.click()
-                print("Clicked cloudflare challenge button")
-            driver.switch_to.default_content()
+                if element.get_attribute("id") != "userBar":
+                    element.click()
+                    print("Clicked cloudflare challenge button")
+                driver.switch_to.default_content()
 
         try:
             # waiting for loading the home site

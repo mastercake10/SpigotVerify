@@ -15,6 +15,8 @@ settings = yaml.safe_load(open("settings.yml", "r"))
 bot = interactions.Client(intents=Intents.DEFAULT, sync_interactions=True, asyncio_debug=True)
 
 class SpigotHandler:
+    current_user: str
+
     def __init__(self) -> None:
         self.spigotSession = SpigotSession(settings["login"]["user"], settings["login"]["password"], settings["login"]["2fa_provider"])
         self.spigotSession.restore()
@@ -34,6 +36,8 @@ class SpigotHandler:
         username = soup.find_all("a", class_="username")[0]
         user_id = username["href"].split("/")[1]
         print(f"Logged in as: {username.text}/{user_id}")
+
+        self.current_user = user_id
 
         self.scraper = SpigotScraper(self.spigotSession, user_id)
         try:
@@ -152,7 +156,10 @@ from interactions import Task, IntervalTrigger
 @Task.create(IntervalTrigger(minutes=5))
 async def buy_task() -> None:
     print("Checking for new buyers...")
-    await spigotHandler.update_buyers()
+    try:
+        await spigotHandler.update_buyers()
+    except NameError:
+        pass
 
 
 complete_button = interactions.Button(
@@ -166,7 +173,9 @@ complete_button = interactions.Button(
     description="Connects your SpigotMC-Account with Discord. Also gives you access to premium channels.",
 )
 async def verify_command(ctx: SlashContext) -> None:
-    await ctx.send("Please go to my profile and like the Verifcation post to link your discord account with SpigotMC! Click \"Done\" when you're done liking. https://www.spigotmc.org/members/mastercake.29634/#profile-post-196759", 
+    profile_post_url = f"https://www.spigotmc.org/members/{spigotHandler.current_user}/#profile-post-{settings['profile_post_id']}"
+    await ctx.send(f"""Please go to my profile and like the Verifcation post to link your discord account with SpigotMC! Click \"Done\" when you're done liking.
+                   You can only claim your roles once, so don't leave the server or you need to verify manually next time. {profile_post_url}""", 
         ephemeral=True,
         components=complete_button)
 
