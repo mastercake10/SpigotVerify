@@ -43,17 +43,17 @@ class SpigotSession:
         # opening spigot in a new tab seems to make cloudflare work again
         time.sleep(2)
         driver.execute_script('''window.open("http://spigotmc.org","_blank");''')
+        # adding cookies from previous session
+        for cookie in self.session.cookies:
+            driver.add_cookie({"name": cookie.name, "value": cookie.value, "domain": cookie.domain})
+        
         time.sleep(10)
         driver.switch_to.window(driver.window_handles[1])
         print(driver.title)
         if "SpigotMC" not in driver.title:
-            # need to click cloudflare challenge tickbox
-
-            for cookie in self.session.cookies:
-                driver.add_cookie({"name": cookie.name, "value": cookie.value, "domain": cookie.domain})
-
+            # need to click cloudflare challenge tickbox, try to find iframe
             try:
-                WebDriverWait(driver, 20).until(EC.frame_to_be_available_and_switch_to_it((By.XPATH, '//iframe[@title="Widget containing a Cloudflare security challenge"]')))
+                WebDriverWait(driver, 20).until(EC.frame_to_be_available_and_switch_to_it((By.XPATH, '//iframe[contains(@title, "Widget")]')))
             except:
                 print("no cf challenge iframe found")
             finally:
